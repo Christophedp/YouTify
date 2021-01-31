@@ -4,7 +4,7 @@ To install:
 
 - On first use, you will have to give permission for the code to access your Spotify Playlist data.
 To do this, run main.py and log into your Spotify account. Next, copy the code from the URL on the resulting webpage.
-This URL should have the format "http://localhost:8888/callback?code=YOURCODE". Copy YOURCODE to the empty credentials.txt file.
+This URL should have the format "http://localhost:8888/callback?code=YOURCODE". Copy YOURCODE to the empty auth_code.txt file.
 Run the code a second time, and it should now work!
 
 Robin laat effe weten of dit werkt. :D
