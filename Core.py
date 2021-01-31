@@ -7,7 +7,6 @@ import base64
 import datetime
 import os
 import stat
-import sys
 import time
 import webbrowser
 import eyed3
@@ -19,15 +18,9 @@ from youtube_search import YoutubeSearch
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
-# Add FFmpeg to sys path
-# FFmpeg_dir = r'C:\Program Files\ffmpeg'
-# if FFmpeg_dir not in sys.path:
-#     sys.path.append(FFmpeg_dir)
-#
-print(sys.path)
 
 class YoutubeDL(object):
-    def __init__(self, credentials, *args, **kwargs):
+    def __init__(self, credentials, output_path = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.client_id = None
@@ -52,17 +45,14 @@ class YoutubeDL(object):
         self.playlist_id = None
         self.tracks = None
 
-        # Audacity
-        self.to_pipe = None
-        self.from_pipe = None
-        self._eol = None
-
         # Output
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.output_path = script_dir
-        self.output_path = os.path.join(script_dir, 'Output')
+        if output_path is None:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            self.output_path = os.path.join(script_dir, 'Output')
+        else:
+            self.output_path = output_path
 
-        print(self.output_path)
+        print('Outputting to:', self.output_path)
 
         self.creds_path = credentials
 
@@ -101,8 +91,7 @@ class YoutubeDL(object):
             'Authorization': f'Bearer {self.token}'
         }
 
-        # Start pipe to Audacity
-        # self.init_audacity_pipe()
+
 
     def authorization_code(self, credentials):
         # Load client ID and client secret
@@ -130,6 +119,7 @@ class YoutubeDL(object):
                 with open(self.auth_code_file) as f_auth:
                     try:
                         self.auth_code = f_auth.readlines()[0]
+                        print(self.auth_code)
                     except IndexError:
                         self.get_authorization_code()
                 # Get refresh token
@@ -735,125 +725,5 @@ class YoutubeDL(object):
 
             if not success:
                 print('Download failed.')
-
-
-
-
-
-
-    """
-    AUDACITY METHODS
-    """
-
-    def init_audacity_pipe(self):
-        # Platform specific constants
-        if sys.platform == 'win32':
-            print("recording-test.py, running on windows")
-            pipe_to_audacity = '\\\\.\\pipe\\ToSrvPipe'
-            pipe_from_audacity = '\\\\.\\pipe\\fromsrvpipe'
-            self._eol = '\r\n\0'
-        else:
-            print("recording-test.py, running on linux or mac")
-            pipe_to_audacity = '/tmp/audacity_script_pipe.to.' + str(os.getuid())
-            pipe_from_audacity = '/tmp/audacity_script_pipe.from.' + str(os.getuid())
-            self._eol = '\n'
-
-        try:
-            self.to_pipe = open(pipe_to_audacity, 'w')
-            print("-- File to write to has been opened")
-        except FileNotFoundError:
-            print('Pipe to audacity does not exist. Ensure Audacity is running with mod-script-pipe.')
-            exit()
-
-        try:
-            self.from_pipe = open(pipe_from_audacity, 'r')
-            print("-- File to read from has now been opened too\r\n")
-        except FileNotFoundError:
-            print('Pipe from audacity does not exist. Ensure Audacity is running with mod-script-pipe.')
-            exit()
-
-    def send_command(self, command):
-        """Send a command to Audacity."""
-        print("Send: >>> " + command)
-        self.to_pipe.write(command + self._eol)
-        self.to_pipe.flush()
-
-    def get_response(self):
-        """Get response from Audacity."""
-        line = self.from_pipe.readline()
-        result = ""
-        while True:
-            result += line
-            line = self.from_pipe.readline()
-            # print(f"Line read: [{line}]")
-            if line == '\n':
-                return result
-
-    def do_command(self, command):
-        """Do the command. Return the response."""
-        self.send_command(command)
-        # time.sleep(0.1) # may be required on slow machines
-        response = self.get_response()
-        print("Rcvd: <<< " + response)
-        return response
-
-    def test_pipe(self):
-        self.do_command('TrackClose')
-        self.do_command("Record2ndChoice")
-        time.sleep(20)
-        self.do_command('Stop')
-        self.do_command("Select: Track=0 mode=Set")
-        # Select entire track
-        self.do_command("SelTrackStartToEnd")
-        # Remove silence
-        self.do_command('TruncateSilence')
-        self.do_command(r'Export2: Filename=D:\chris\Music\test.mp3')
-
-
-if __name__ == "__main__":
-    # playlist_dir = r'D:\chris\Documents\Google\Takeout\YouTube en YouTube Music\playlists'
-    # playlist_name = r'\vink-ik-leuks.json'
-
-    # playlist_path = playlist_dir + playlist_name
-    creds = 'credentials.txt'
-
-    playlist = 'Techno'
-
-    client = YoutubeDL(creds)
-    client.get_current_playlists()
-    client.select_playlist('Techno')
-    client.get_playlist_tracks()
-    # client.get_playing_track()
-
-    for i in range(len(client.tracks)):
-        print('Track No:', i)
-        youtube_track_data = client.youtube_search_track(client.tracks[i])
-
-        # input("Press Enter to continue...")
-        client.youtube_download_audio(youtube_track_data)
-
-
-    # client.play_single_track(0)
-    # client.record_single_track(-7)
-
-    # test = client.get_user_profile()
-    # print(test.json())
-
-
-    # client.read_json(playlist_path)
-    test = 'Sub Focus & Wilkinson - Just Hold On (Sub Focus & Wilkinson vs. Pola & Bryson Remix)'
-    # data_df = client.read_json(playlist_path)
-    # client.check_classification(data_df)
-
-
-    # print(data_df['Title'])
-    # client.search_track(test)
-    # df_classified = client.classify_manual(data_df)
-    # client.check_classification(df_classified)
-
-
-
-
-
 
 

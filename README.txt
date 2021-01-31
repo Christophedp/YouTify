@@ -1,7 +1,5 @@
 To install:
-- Ensure latest version of youtube-dl is installed (https://pypi.org/project/youtube_dl/)
-	If using pycharm, install by activating venv in command window and using pip.
-- Ensure FFmpeg is installed. To do this, download, extract and copy the three executables in the bin directory to a directory included in the python path. E.g. the pycharm project directory.
+- Ensure FFmpeg is installed. To do this, download, extract and copy the three executables in the bin directory to a directory included in the python path. E.g. the directory containing your Pycharm project.
 	(https://www.ffmpeg.org/)
 
 - On first use, you will have to give permission for the code to access your Spotify Playlist data.
