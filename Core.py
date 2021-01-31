@@ -1,5 +1,7 @@
 """
 Youtube music downloader. Uses Spotify to retrieve song details.
+TO DO:
+- Remove string characters (") from file name.
 """
 import json
 import requests
@@ -15,6 +17,7 @@ import pandas as pd
 import numpy as np
 from urllib.parse import urlencode
 from youtube_search import YoutubeSearch
+from mutagen.mp3 import MP3
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -36,6 +39,9 @@ class YoutubeDL(object):
         self.client_credentials_64 = None
         self.auth_code = None
         self.refresh_token = None
+
+        # Set audio format
+        self.audio_format = 'mp3'
 
         # Playlists
         self.playlist = None
@@ -505,7 +511,7 @@ class YoutubeDL(object):
         self.tracks = []
         while n_tracks_returned == 100:
             query_params = {
-                'fields': 'items(track(name,artists(name,href),album(name,release_date),duration_ms,id,href,uri))',
+                # 'fields': 'items(track(name,artists(name,href),album(name,release_date),duration_ms,id,href,uri,images))',
                 'limit': 100,
                 'offset': n_tracks
             }
@@ -639,6 +645,50 @@ class YoutubeDL(object):
 
         os.rename(filepath, filepath.replace('fresh_recorded', filename))
 
+    def write_metadata_new(self, track, filepath):
+        try:
+            audiofile = eyed3.load(filepath)
+            # time.sleep(0.5)
+        except FileNotFoundError:
+            print('Audiofile not found.')
+
+        track_data = track['track']
+        track_name = track_data['name']
+
+        album_data = track_data['album']
+        album_name = album_data['name']
+        album_img_url = album_data['images'][0]['url']
+
+        # print('ALBUM KEYS:', album_data.keys())
+        artists = track_data['artists']
+        artist_names = self.list_artist_names(self, artists)
+
+        artists_joined = ' '.join(artist_names)
+
+        # Download album artwork from Spotify
+        playlist_path = os.path.split(filepath)[0]
+        temp_thumbnail = os.path.join(playlist_path, f'{track_name}.jpg')
+
+        img_data = requests.get(album_img_url).content
+        print('Downloading thumbnail...')
+        with open(temp_thumbnail, 'wb') as handler:
+            handler.write(img_data)
+
+        # ADD GENRE
+        audiofile.initTag()
+
+        audiofile.tag.artist = artists_joined
+        audiofile.tag.album = album_name
+        audiofile.tag.title = track_name
+        audiofile.tag.images.set(3, open(temp_thumbnail, 'rb').read(), 'image/jpeg')
+
+        audiofile.tag.save()
+        # Remove thumbnail file
+        os.remove(temp_thumbnail)
+
+
+        # os.rename(filepath, filepath.replace('fresh_recorded', filename))
+
     @staticmethod
     def list_artist_names(self, artists_data):
         artists = []
@@ -651,8 +701,11 @@ class YoutubeDL(object):
     """
 
     def youtube_search_track(self, track, max_results=10):
+        print('Track keys:,', track['track']['album']['images'])
         track_data = track['track']
         track_name = track_data['name']
+        album_data = track_data['album']
+        # print('ALBUM KEYS:', album_data.keys())
         artists = track_data['artists']
 
         artist_names = self.list_artist_names(self, artists)
@@ -673,8 +726,6 @@ class YoutubeDL(object):
 
         for result in yt_results:
             print(f'\t{result["title"]}')
-            # print(result['id'])
-            # print(result['thumbnails'])
 
         mp3_title = f'{", ".join(artist_names)} - {track_name}'
         print('Title:', mp3_title)
@@ -684,7 +735,8 @@ class YoutubeDL(object):
 
         return [best_match, mp3_title]
 
-    def youtube_download_audio(self, youtube_search_output):
+    def youtube_download_audio(self, youtube_search_output, track):
+        # Unpack youtube search output
         video_data = youtube_search_output[0]
         mp3_title = youtube_search_output[1]
 
@@ -696,20 +748,23 @@ class YoutubeDL(object):
         # Create youtube downloader object
         suffix = video_data['url_suffix']
         yt_url = f'http://www.youtube.com{suffix}'
-        print(video_data.keys())
+        filepath = os.path.join(self.output_path, f'{mp3_title}.{self.audio_format}')
+
+        # print(video_data.keys())
         print(f'Downloading from (url): {yt_url})')
 
         ydl_opts = {
             'format': 'bestaudio/best',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'writethumbnail': True,
-            'prefer_ffmpeg': True,
-            'keepvideo': True,
-            'outtmpl': os.path.join(self.output_path, f'{mp3_title}.mp3')
+            'postprocessors': [
+                {'key': 'FFmpegExtractAudio',
+                'preferredcodec': self.audio_format,
+                'preferredquality': '192'
+                 }
+            ],
+            # 'writethumbnail': True,
+            # 'prefer_ffmpeg': True,
+            # 'keepvideo': False,
+            'outtmpl': os.path.join(self.output_path, f'{mp3_title}.%(ext)s')
         }
 
         with youtube_dlc.YoutubeDL(ydl_opts) as ydl:
@@ -725,5 +780,10 @@ class YoutubeDL(object):
 
             if not success:
                 print('Download failed.')
+
+        # Add metadata
+        self.write_metadata_new(track, filepath)
+    # def download_playlist(self):
+
 
 
