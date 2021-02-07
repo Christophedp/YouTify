@@ -8,6 +8,7 @@ import requests
 import base64
 import datetime
 import os
+import re
 import stat
 import time
 import webbrowser
@@ -654,6 +655,7 @@ class YoutubeDL(object):
 
         track_data = track['track']
         track_name = track_data['name']
+        track_name = self.clean_string(track_name)
 
         album_data = track_data['album']
         album_name = album_data['name']
@@ -696,12 +698,17 @@ class YoutubeDL(object):
             artists.append(artist['name'])
         return artists
 
+    @staticmethod
+    def clean_string(string):
+        string = re.sub(r'[^0-9a-zA-Z\[\]() ,-]+', '', string)
+        return string
+
     """
     YOUTUBE METHODS
     """
 
     def youtube_search_track(self, track, max_results=10):
-        print('Track keys:,', track['track']['album']['images'])
+        # print('Track keys:,', track['track']['album']['images'])
         track_data = track['track']
         track_name = track_data['name']
         album_data = track_data['album']
@@ -724,21 +731,32 @@ class YoutubeDL(object):
                 print('Youtube Search KeyError... Trying again...')
                 n_attempts = n_attempts + 1
 
-        for result in yt_results:
-            print(f'\t{result["title"]}')
+        # for result in yt_results:
+        #     print(f'\t{result["title"]}')
 
         mp3_title = f'{", ".join(artist_names)} - {track_name}'
+        mp3_title = self.clean_string(mp3_title)
         print('Title:', mp3_title)
 
         # RUN SOMETHING HERE TO IDENTIFY THE MOST CORRECT SEARCH RESULT
-        best_match = yt_results[0]
+        print('Amount of results found:', len(yt_results))
+        try:
+            best_match = yt_results[0]
+        except IndexError:
+            print('Nothing found on YouTube?')
+            best_match = None
 
-        return [best_match, mp3_title]
+        output = {
+            'Best match': best_match,
+            'MP3 Title': mp3_title
+        }
+
+        return output
 
     def youtube_download_audio(self, youtube_search_output, track):
         # Unpack youtube search output
-        video_data = youtube_search_output[0]
-        mp3_title = youtube_search_output[1]
+        video_data = youtube_search_output['Best match']
+        mp3_title = youtube_search_output['MP3 Title']
 
         # Check if output path exists. If not, create and ensure write permission.
         if not os.path.isdir(self.output_path):
@@ -750,40 +768,56 @@ class YoutubeDL(object):
         yt_url = f'http://www.youtube.com{suffix}'
         filepath = os.path.join(self.output_path, f'{mp3_title}.{self.audio_format}')
 
-        # print(video_data.keys())
-        print(f'Downloading from (url): {yt_url})')
+        if os.path.exists(filepath):
+            print('This track has already been downloaded! Skipping.')
+        else:
+            print(f'Downloading from (url): {yt_url})')
 
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'postprocessors': [
-                {'key': 'FFmpegExtractAudio',
-                'preferredcodec': self.audio_format,
-                'preferredquality': '192'
-                 }
-            ],
-            # 'writethumbnail': True,
-            # 'prefer_ffmpeg': True,
-            # 'keepvideo': False,
-            'outtmpl': os.path.join(self.output_path, f'{mp3_title}.%(ext)s')
-        }
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'postprocessors': [
+                    {'key': 'FFmpegExtractAudio',
+                    'preferredcodec': self.audio_format,
+                    'preferredquality': '192'
+                     }
+                ],
+                # 'writethumbnail': True,
+                # 'prefer_ffmpeg': True,
+                # 'keepvideo': False,
+                'outtmpl': os.path.join(self.output_path, f'{mp3_title}.%(ext)s')
+            }
 
-        with youtube_dlc.YoutubeDL(ydl_opts) as ydl:
-            n_attempts = 0
-            success = False
-            while n_attempts < 10 and not success:
-                try:
-                    ydl.download([yt_url])
-                    success = True
-                except youtube_dlc.utils.DownloadError:
-                    print(f'Unable to extract video data... This was attempt {n_attempts}')
-                n_attempts = n_attempts + 1
+            with youtube_dlc.YoutubeDL(ydl_opts) as ydl:
+                n_attempts = 0
+                success = False
+                while n_attempts < 10 and not success:
+                    try:
+                        ydl.download([yt_url])
+                        success = True
+                    except youtube_dlc.utils.DownloadError:
+                        print(f'Unable to extract video data... This was attempt {n_attempts}')
+                    n_attempts = n_attempts + 1
 
-            if not success:
-                print('Download failed.')
+                if not success:
+                    print('Download failed.')
 
-        # Add metadata
-        self.write_metadata_new(track, filepath)
+            # Add metadata
+            self.write_metadata_new(track, filepath)
     # def download_playlist(self):
+
+    def download_playlist(self):
+        if self.playlist_id is not None:
+            # Get playlist tracks
+            self.get_playlist_tracks()
+
+            # Loop through the tracks, search on Youtube and download.
+            for _idx in range(len(self.tracks)):
+                track = self.tracks[_idx]
+                print('Track No:', _idx)
+
+                youtube_track_data = self.youtube_search_track(track)
+                self.youtube_download_audio(youtube_track_data, track)
+
 
 
 
