@@ -1,7 +1,7 @@
 """
 Youtube music downloader. Uses Spotify to retrieve song details.
 TO DO:
-- Remove string characters (") from file name.
+- Check if mp3 file exists at the start of the searching process. This should save a lot of time.
 """
 import json
 import requests
@@ -16,17 +16,16 @@ import eyed3
 import youtube_dlc
 import pandas as pd
 import numpy as np
+import tkinter as tk
 from urllib.parse import urlencode
 from youtube_search import YoutubeSearch
-from mutagen.mp3 import MP3
+from GUI import GUIStart
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
 class YoutubeDL(object):
-    def __init__(self, credentials, output_path = None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
+    def __init__(self, credentials, output_path=None, *args, **kwargs):
         self.client_id = None
         self.client_secret = None
         self.token = None
@@ -97,6 +96,14 @@ class YoutubeDL(object):
         self.auth_header = {
             'Authorization': f'Bearer {self.token}'
         }
+
+        # Start GUI
+        playlists = self.collect_playlists()
+        root = tk.Tk()
+        gui = GUIStart(root, playlists, *args, **kwargs)
+        root.mainloop()
+        self.chosen_playlist = gui.selected_playlists
+
 
 
 
@@ -228,6 +235,7 @@ class YoutubeDL(object):
         """
         Request Spotify token
         """
+        client_credentials_64 = None
         if self.client_id is None or self.client_secret is None:
             try:
                 with open(credentials) as f:
@@ -462,6 +470,22 @@ class YoutubeDL(object):
         if valid_response:
             playlist_data = response.json()
             self.playlists = playlist_data['items']
+
+    def collect_playlists(self, playlist_name=None):
+        self.playlist_name = playlist_name
+
+        # Retrieve list of playlists
+        self.get_current_playlists()
+
+        n_playlists = len(self.playlists)
+        playlists = []
+
+        if self.playlist_name is None:
+            for i in range(n_playlists):
+                item = self.playlists[i]
+                playlists.append(item['name'])
+
+        return playlists
 
     def select_playlist(self, playlist_name = None):
         self.playlist_name = playlist_name
@@ -758,52 +782,54 @@ class YoutubeDL(object):
         video_data = youtube_search_output['Best match']
         mp3_title = youtube_search_output['MP3 Title']
 
-        # Check if output path exists. If not, create and ensure write permission.
-        if not os.path.isdir(self.output_path):
-            os.makedirs(self.output_path)
-            os.chmod(self.output_path, stat.S_IWRITE)
-
-        # Create youtube downloader object
-        suffix = video_data['url_suffix']
-        yt_url = f'http://www.youtube.com{suffix}'
-        filepath = os.path.join(self.output_path, f'{mp3_title}.{self.audio_format}')
-
-        if os.path.exists(filepath):
-            print('This track has already been downloaded! Skipping.')
+        if video_data is None:
+            print('Song not found. Skipping.')
         else:
-            print(f'Downloading from (url): {yt_url})')
+            # Check if output path exists. If not, create and ensure write permission.
+            if not os.path.isdir(self.output_path):
+                os.makedirs(self.output_path)
+                os.chmod(self.output_path, stat.S_IWRITE)
 
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'postprocessors': [
-                    {'key': 'FFmpegExtractAudio',
-                    'preferredcodec': self.audio_format,
-                    'preferredquality': '192'
-                     }
-                ],
-                # 'writethumbnail': True,
-                # 'prefer_ffmpeg': True,
-                # 'keepvideo': False,
-                'outtmpl': os.path.join(self.output_path, f'{mp3_title}.%(ext)s')
-            }
+            # Create youtube downloader object
+            suffix = video_data['url_suffix']
+            yt_url = f'http://www.youtube.com{suffix}'
+            filepath = os.path.join(self.output_path, f'{mp3_title}.{self.audio_format}')
 
-            with youtube_dlc.YoutubeDL(ydl_opts) as ydl:
-                n_attempts = 0
-                success = False
-                while n_attempts < 10 and not success:
-                    try:
-                        ydl.download([yt_url])
-                        success = True
-                    except youtube_dlc.utils.DownloadError:
-                        print(f'Unable to extract video data... This was attempt {n_attempts}')
-                    n_attempts = n_attempts + 1
+            if os.path.exists(filepath):
+                print('This track has already been downloaded! Skipping.')
+            else:
+                print(f'Downloading from (url): {yt_url})')
 
-                if not success:
-                    print('Download failed.')
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'postprocessors': [
+                        {'key': 'FFmpegExtractAudio',
+                        'preferredcodec': self.audio_format,
+                        'preferredquality': '192'
+                         }
+                    ],
+                    # 'writethumbnail': True,
+                    # 'prefer_ffmpeg': True,
+                    # 'keepvideo': False,
+                    'outtmpl': os.path.join(self.output_path, f'{mp3_title}.%(ext)s')
+                }
 
-            # Add metadata
-            self.write_metadata_new(track, filepath)
-    # def download_playlist(self):
+                with youtube_dlc.YoutubeDL(ydl_opts) as ydl:
+                    n_attempts = 0
+                    success = False
+                    while n_attempts < 10 and not success:
+                        try:
+                            ydl.download([yt_url])
+                            success = True
+                        except youtube_dlc.utils.DownloadError:
+                            print(f'Unable to extract video data... This was attempt {n_attempts}')
+                        n_attempts = n_attempts + 1
+
+                    if not success:
+                        print('Download failed.')
+
+                # Add metadata
+                self.write_metadata_new(track, filepath)
 
     def download_playlist(self):
         if self.playlist_id is not None:
