@@ -25,7 +25,7 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 
 class YoutubeDL(object):
-    def __init__(self, credentials, output_path=None, *args, **kwargs):
+    def __init__(self, output_path=None, credentials=None, *args, **kwargs):
         self.client_id = None
         self.client_secret = None
         self.token = None
@@ -60,7 +60,7 @@ class YoutubeDL(object):
 
         print('Outputting to:', self.output_path)
 
-        self.creds_path = credentials
+        self.creds_path = 'credentials.txt'
 
         # URLs for Spotify API
         authenticate_url = r'https://accounts.spotify.com/'
@@ -102,10 +102,11 @@ class YoutubeDL(object):
         root = tk.Tk()
         gui = GUIStart(root, playlists, *args, **kwargs)
         root.mainloop()
+        # Let user select a playlist
         self.chosen_playlist = gui.selected_playlists
-
-
-
+        # Enter this choice
+        # LIMIT TO ONE PLAYLIST FOR NOW
+        self.select_playlist(self.chosen_playlist[0])
 
     def authorization_code(self, credentials):
         # Load client ID and client secret
@@ -487,7 +488,7 @@ class YoutubeDL(object):
 
         return playlists
 
-    def select_playlist(self, playlist_name = None):
+    def select_playlist(self, playlist_name=None):
         self.playlist_name = playlist_name
         self.output_path = os.path.join(self.output_path, self.playlist_name)
 
