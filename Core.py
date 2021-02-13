@@ -130,11 +130,15 @@ class YoutubeDL(object):
                 self.renew_token()
 
             except IndexError:
+                print('NO REFRESH TOKEN')
                 # Get authorization code
                 with open(self.auth_code_file) as f_auth:
                     try:
                         self.auth_code = f_auth.readlines()[0]
-                        print(self.auth_code)
+                        # Remove state if included in the authorization  code
+                        if '#' in self.auth_code:
+                            self.auth_code = self.auth_code.split('#')[0]
+
                     except IndexError:
                         self.get_authorization_code()
                 # Get refresh token
@@ -166,7 +170,12 @@ class YoutubeDL(object):
         valid_request = response.status_code in range(200, 299)
 
         if valid_request:
+            print('Opening browser')
             webbrowser.open(response.url, new=1)
+        # Run again with cookies now enabled?
+        # res = requests.get(self.authorization_url)
+        # print(res.url)
+        # print(requests.get(res.url).text)
         print('Please paste authorization code in auth_code.txt.')
         exit()
 
@@ -200,6 +209,8 @@ class YoutubeDL(object):
             with open(self.refresh_token_file, 'w') as f:
                 f.write(self.refresh_token)
             print('Refresh token saved for future use. Authorization is now granted!')
+        else:
+            print('Request not valid...')
 
     """
     Use the refresh token to refresh the access token.
@@ -733,47 +744,50 @@ class YoutubeDL(object):
     """
 
     def youtube_search_track(self, track, max_results=10):
-        # print('Track keys:,', track['track']['album']['images'])
+        download = False
+        best_match = None
+
         track_data = track['track']
         track_name = track_data['name']
-        album_data = track_data['album']
-        # print('ALBUM KEYS:', album_data.keys())
         artists = track_data['artists']
-
         artist_names = self.list_artist_names(self, artists)
 
-        artists_query = ' '.join(artist_names)
-        search_query = f'{track_name} {artists_query}'
-        print(f'Searcing for: {search_query}')
-
-        n_attempts = 0
-        success = False
-        while n_attempts < 5 and not success:
-            try:
-                yt_results = YoutubeSearch(search_query, max_results=max_results).to_dict()
-                success = True
-            except KeyError as e:
-                print('Youtube Search KeyError... Trying again...')
-                n_attempts = n_attempts + 1
-
-        # for result in yt_results:
-        #     print(f'\t{result["title"]}')
-
+        # Construct title for MP3
         mp3_title = f'{", ".join(artist_names)} - {track_name}'
         mp3_title = self.clean_string(mp3_title)
         print('Title:', mp3_title)
 
-        # RUN SOMETHING HERE TO IDENTIFY THE MOST CORRECT SEARCH RESULT
-        print('Amount of results found:', len(yt_results))
-        try:
-            best_match = yt_results[0]
-        except IndexError:
-            print('Nothing found on YouTube?')
-            best_match = None
+        # Check if the song has already been downloaded. If yes (and overwrite is true), skip.
+        filepath = os.path.join(self.output_path, f'{mp3_title}.{self.audio_format}')
+        if os.path.exists(filepath):
+            print('Song has already been downloaded. Skipping...')
+        else:
+            download = True
+            artists_query = ' '.join(artist_names)
+            search_query = f'{track_name} {artists_query}'
+            print(f'Searcing for: {search_query}')
+
+            n_attempts = 0
+            success = False
+            while n_attempts < 5 and not success:
+                try:
+                    yt_results = YoutubeSearch(search_query, max_results=max_results).to_dict()
+                    success = True
+                except KeyError as e:
+                    print('Youtube Search KeyError... Trying again...')
+                    n_attempts = n_attempts + 1
+
+            # RUN SOMETHING HERE TO IDENTIFY THE MOST CORRECT SEARCH RESULT
+            # print('Amount of results found:', len(yt_results))
+            try:
+                best_match = yt_results[0]
+            except IndexError:
+                print('Nothing found on YouTube?')
 
         output = {
             'Best match': best_match,
-            'MP3 Title': mp3_title
+            'MP3 Title': mp3_title,
+            'Download': download
         }
 
         return output
@@ -783,54 +797,48 @@ class YoutubeDL(object):
         video_data = youtube_search_output['Best match']
         mp3_title = youtube_search_output['MP3 Title']
 
-        if video_data is None:
-            print('Song not found. Skipping.')
-        else:
-            # Check if output path exists. If not, create and ensure write permission.
-            if not os.path.isdir(self.output_path):
-                os.makedirs(self.output_path)
-                os.chmod(self.output_path, stat.S_IWRITE)
+        # Check if output path exists. If not, create and ensure write permission.
+        if not os.path.isdir(self.output_path):
+            os.makedirs(self.output_path)
+            os.chmod(self.output_path, stat.S_IWRITE)
 
-            # Create youtube downloader object
-            suffix = video_data['url_suffix']
-            yt_url = f'http://www.youtube.com{suffix}'
-            filepath = os.path.join(self.output_path, f'{mp3_title}.{self.audio_format}')
+        # Create youtube downloader object
+        suffix = video_data['url_suffix']
+        yt_url = f'http://www.youtube.com{suffix}'
+        filepath = os.path.join(self.output_path, f'{mp3_title}.{self.audio_format}')
 
-            if os.path.exists(filepath):
-                print('This track has already been downloaded! Skipping.')
-            else:
-                print(f'Downloading from (url): {yt_url})')
+        # Download
+        print(f'Downloading from (url): {yt_url})')
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'postprocessors': [
+                {'key': 'FFmpegExtractAudio',
+                'preferredcodec': self.audio_format,
+                'preferredquality': '192'
+                 }
+            ],
+            # 'writethumbnail': True,
+            # 'prefer_ffmpeg': True,
+            # 'keepvideo': False,
+            'outtmpl': os.path.join(self.output_path, f'{mp3_title}.%(ext)s')
+        }
 
-                ydl_opts = {
-                    'format': 'bestaudio/best',
-                    'postprocessors': [
-                        {'key': 'FFmpegExtractAudio',
-                        'preferredcodec': self.audio_format,
-                        'preferredquality': '192'
-                         }
-                    ],
-                    # 'writethumbnail': True,
-                    # 'prefer_ffmpeg': True,
-                    # 'keepvideo': False,
-                    'outtmpl': os.path.join(self.output_path, f'{mp3_title}.%(ext)s')
-                }
+        with youtube_dlc.YoutubeDL(ydl_opts) as ydl:
+            n_attempts = 0
+            success = False
+            while n_attempts < 10 and not success:
+                try:
+                    ydl.download([yt_url])
+                    success = True
+                except youtube_dlc.utils.DownloadError:
+                    print(f'Unable to extract video data... This was attempt {n_attempts}')
+                n_attempts = n_attempts + 1
 
-                with youtube_dlc.YoutubeDL(ydl_opts) as ydl:
-                    n_attempts = 0
-                    success = False
-                    while n_attempts < 10 and not success:
-                        try:
-                            ydl.download([yt_url])
-                            success = True
-                        except youtube_dlc.utils.DownloadError:
-                            print(f'Unable to extract video data... This was attempt {n_attempts}')
-                        n_attempts = n_attempts + 1
+            if not success:
+                print('Download failed.')
 
-                    if not success:
-                        print('Download failed.')
-
-                # Add metadata
-                self.write_metadata_new(track, filepath)
+        # Add metadata
+        self.write_metadata_new(track, filepath)
 
     def download_playlist(self):
         if self.playlist_id is not None:
@@ -843,7 +851,14 @@ class YoutubeDL(object):
                 print('Track No:', _idx)
 
                 youtube_track_data = self.youtube_search_track(track)
-                self.youtube_download_audio(youtube_track_data, track)
+                video_data = youtube_track_data['Best match']
+                download = youtube_track_data['Download']
+
+                if download:
+                    if video_data is None:
+                        print('Song not found. Skipping.')
+                    else:
+                        self.youtube_download_audio(youtube_track_data, track)
 
 
 
