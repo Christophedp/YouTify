@@ -33,7 +33,6 @@ class YoutubeDL(object):
         self.expired = True
         self.now = None
         self.data = None
-        self.playlist_name = None
         self.classified = None
         self.classification_file = None
         self.client_credentials_64 = None
@@ -50,6 +49,7 @@ class YoutubeDL(object):
         self.playlist_href = None
         self.playlist_id = None
         self.tracks = None
+        self.chosen_playlist = None
 
         # Output
         if output_path is None:
@@ -96,17 +96,6 @@ class YoutubeDL(object):
         self.auth_header = {
             'Authorization': f'Bearer {self.token}'
         }
-
-        # Start GUI
-        playlists = self.collect_playlists()
-        root = tk.Tk()
-        gui = GUIStart(root, playlists, *args, **kwargs)
-        root.mainloop()
-        # Let user select a playlist
-        self.chosen_playlist = gui.selected_playlists
-        # Enter this choice
-        # LIMIT TO ONE PLAYLIST FOR NOW
-        self.select_playlist(self.chosen_playlist[0])
 
     def authorization_code(self, credentials):
         # Load client ID and client secret
@@ -170,7 +159,7 @@ class YoutubeDL(object):
         valid_request = response.status_code in range(200, 299)
 
         if valid_request:
-            print('Opening browser')
+            # print('Opening browser')
             webbrowser.open(response.url, new=1)
         # Run again with cookies now enabled?
         # res = requests.get(self.authorization_url)
@@ -192,7 +181,7 @@ class YoutubeDL(object):
         }
 
         response = requests.post(self.token_url, data=token_body, headers=token_headers)
-        print(response.status_code)
+        # print(response.status_code)
         valid_request = response.status_code in range(200, 299)
 
         if valid_request:
@@ -685,7 +674,6 @@ class YoutubeDL(object):
     def write_metadata_new(self, track, filepath):
         try:
             audiofile = eyed3.load(filepath)
-            # time.sleep(0.5)
         except FileNotFoundError:
             print('Audiofile not found.')
 
@@ -700,8 +688,9 @@ class YoutubeDL(object):
         # print('ALBUM KEYS:', album_data.keys())
         artists = track_data['artists']
         artist_names = self.list_artist_names(self, artists)
-
         artists_joined = ' '.join(artist_names)
+
+        genre = self.guess_genre(artists)
 
         # Download album artwork from Spotify
         playlist_path = os.path.split(filepath)[0]
@@ -712,20 +701,44 @@ class YoutubeDL(object):
         with open(temp_thumbnail, 'wb') as handler:
             handler.write(img_data)
 
-        # ADD GENRE
         audiofile.initTag()
 
         audiofile.tag.artist = artists_joined
         audiofile.tag.album = album_name
         audiofile.tag.title = track_name
+        audiofile.tag.genre = genre
         audiofile.tag.images.set(3, open(temp_thumbnail, 'rb').read(), 'image/jpeg')
 
         audiofile.tag.save()
         # Remove thumbnail file
         os.remove(temp_thumbnail)
 
+    def guess_genre(self, artists):
+        artists_names = []
+        artists_genres = []
+        for artist in artists:
+            artists_names.append(artist['name'])
 
-        # os.rename(filepath, filepath.replace('fresh_recorded', filename))
+            # Retrieve artist genre(s) to get an indication of the song genre
+            href = artist['href']
+            artist_details = self.request_href(href).json()
+            artist_genres = artist_details['genres']
+            try:
+                artists_genres.append(artist_genres[0])
+            except IndexError:
+                pass
+
+        genre = list(set(artists_genres))
+        if len(artists_genres) > 1:
+            # Find most occurring genre, assume this is the correct one.
+            most_occurring_genre = max(set(artists_genres), key=artists_genres.count)
+            genre = [most_occurring_genre]
+            # print('Multiple possible genres...')
+        elif len(genre) == 0:
+            # print('No genre found...')
+            genre = ['None']
+
+        return genre[0]
 
     @staticmethod
     def list_artist_names(self, artists_data):
@@ -840,7 +853,7 @@ class YoutubeDL(object):
         # Add metadata
         self.write_metadata_new(track, filepath)
 
-    def download_playlist(self):
+    def _rip_playlist(self):
         if self.playlist_id is not None:
             # Get playlist tracks
             self.get_playlist_tracks()
@@ -860,6 +873,26 @@ class YoutubeDL(object):
                     else:
                         self.youtube_download_audio(youtube_track_data, track)
 
+    def download_playlist(self, playlist=None, *args, **kwargs):
+        # Get playlists
+        playlists = self.collect_playlists()
+
+        # If the user has specified a playlist, download this one. Otherwise, fire-up GUI.
+        if playlist is not None:
+            self.select_playlist(playlist)
+        else:
+            # Start GUI
+            root = tk.Tk()
+            gui = GUIStart(root, playlists, *args, **kwargs)
+            root.mainloop()
+            # Let user select a playlist
+            self.chosen_playlist = gui.selected_playlists
+            # Enter this choice
+            # LIMIT TO ONE PLAYLIST FOR NOW
+            self.select_playlist(self.chosen_playlist[0])
+
+        # Download
+        self._rip_playlist()
 
 
 
