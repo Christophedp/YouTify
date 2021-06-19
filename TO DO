@@ -1,0 +1,2 @@
+- Issue: Clean string currently removes special characters from artist names, e.g. ü. Leads to weird names.
+    Fix: Change to normal u? Or can special characters be included in artist names without issues?
