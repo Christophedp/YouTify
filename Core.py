@@ -14,11 +14,13 @@ import time
 import webbrowser
 import eyed3
 import youtube_dlc
+import yt_dlp
 import pandas as pd
 import numpy as np
 import tkinter as tk
 from urllib.parse import urlencode
 from youtube_search import YoutubeSearch
+from fast_youtube_search import search_youtube
 from GUI import GUIStart
 
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -783,19 +785,27 @@ class YoutubeDL(object):
             n_attempts = 0
             success = False
             while n_attempts < 5 and not success:
+                print('Search attempt...')
                 try:
-                    yt_results = YoutubeSearch(search_query, max_results=max_results).to_dict()
+                    # yt_results = YoutubeSearch(search_query, max_results=max_results).to_dict()
+                    yt_results = search_youtube(search_query.split(' '))
+                    print(yt_results)
                     success = True
                 except KeyError as e:
                     print('Youtube Search KeyError... Trying again...')
                     n_attempts = n_attempts + 1
 
+            print('Finished searching...')
             # RUN SOMETHING HERE TO IDENTIFY THE MOST CORRECT SEARCH RESULT
             # print('Amount of results found:', len(yt_results))
             try:
                 best_match = yt_results[0]
             except IndexError:
                 print('Nothing found on YouTube?')
+
+            id = best_match['id']
+            suffix = f'/watch?v={id}'
+            best_match['url_suffix'] = suffix
 
         output = {
             'Best match': best_match,
@@ -836,14 +846,14 @@ class YoutubeDL(object):
             'outtmpl': os.path.join(self.output_path, f'{mp3_title}.%(ext)s')
         }
 
-        with youtube_dlc.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             n_attempts = 0
             success = False
             while n_attempts < 10 and not success:
                 try:
                     ydl.download([yt_url])
                     success = True
-                except youtube_dlc.utils.DownloadError:
+                except yt_dlp.utils.DownloadError:
                     print(f'Unable to extract video data... This was attempt {n_attempts}')
                 n_attempts = n_attempts + 1
 
