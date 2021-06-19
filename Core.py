@@ -491,7 +491,8 @@ class YoutubeDL(object):
         return playlists
 
     def select_playlist(self, playlist_name=None):
-        self.playlist_name = playlist_name
+        self.playlist_name = self.clean_string(playlist_name)
+        print('CLEAN PLAYLIST?', self.playlist_name)
         self.output_path = os.path.join(self.output_path, self.playlist_name)
 
         N_playlists = len(self.playlists)
@@ -752,6 +753,7 @@ class YoutubeDL(object):
     @staticmethod
     def clean_string(string):
         string = re.sub(r'[^0-9a-zA-Z\[\]() ,-]+', '', string)
+        string = re.sub(r'\.', '', string)
         return string
 
     """
@@ -889,6 +891,7 @@ class YoutubeDL(object):
 
         # If the user has specified a playlist, download this one. Otherwise, fire-up GUI.
         if playlist is not None:
+            playlist = self.clean_string(playlist)
             self.select_playlist(playlist)
         else:
             # Start GUI
