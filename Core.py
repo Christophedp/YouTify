@@ -513,6 +513,7 @@ class YoutubeDL(object):
         else:
             for i in range(N_playlists):
                 item = self.playlists[i]
+                print(item['name'])
                 if item['name'] == playlist_name:
                     _idx = i
             if _idx == 1000:
