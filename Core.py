@@ -46,7 +46,7 @@ class YoutubeDL(object):
 
         # Playlists
         self.playlist = None
-        self.playlists = None
+        self.playlists = []
         self.playlist_name = None
         self.playlist_href = None
         self.playlist_id = None
@@ -462,17 +462,23 @@ class YoutubeDL(object):
             'Authorization': f'Bearer {self.token}'
         }
 
-        query_params = {
-            'limit': 50,
-            'offset': 0
-        }
+        _end = False
+        _offset = 0
+        while not _end:
+            query_params = {
+                'limit': 50,
+                'offset': _offset
+            }
 
-        response = requests.get(self.playlists_url, params=query_params, headers=header)
-        valid_response = response.status_code in range(200, 299)
+            response = requests.get(self.playlists_url, params=query_params, headers=header)
+            valid_response = response.status_code in range(200, 299)
 
-        if valid_response:
-            playlist_data = response.json()
-            self.playlists = playlist_data['items']
+            if valid_response:
+                playlist_data = response.json()
+                self.playlists = self.playlists + playlist_data['items']
+                _offset = len(self.playlists)
+                # Stop looping through playlists if the latest batch is smaller than 50
+                _end = _offset % 50 != 0
 
     def collect_playlists(self, playlist_name=None):
         self.playlist_name = playlist_name
@@ -513,7 +519,7 @@ class YoutubeDL(object):
         else:
             for i in range(N_playlists):
                 item = self.playlists[i]
-                print(item['name'])
+                # print(item['name'])
                 if item['name'] == playlist_name:
                     _idx = i
             if _idx == 1000:
@@ -525,7 +531,6 @@ class YoutubeDL(object):
         self.playlist_href = self.playlist['href']
         self.playlist_id = self.playlist['id']
 
-        print(self.playlist.keys())
         print(f'Selected playlist {self.playlist_name}.')
 
     def get_playlist_tracks(self):
